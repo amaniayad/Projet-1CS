@@ -1,0 +1,71 @@
+const express = require('express');
+const mysql = require('mysql');
+const bcrypt = require('bcrypt');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');        
+
+const app = express();
+const port = 3000;
+
+app.use(express.json());
+app.use(cors());
+
+const db = mysql.createConnection({   // replace these info with the information of the used database 
+    host: 'localhost',
+    user: 'root',
+    password: 'meriem2003meriem', 
+    database: 'nodejs',
+    authPlugin: 'meriem2003meriem'  // a way of authentication
+});
+
+db.connect((err) => {
+    if (err) throw err;
+    console.log('Connected to MySQL database');
+});
+
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+
+    db.query('SELECT * FROM loginuser WHERE user_name = ?', [username], async (error, results) => {
+        if (error) throw error;
+
+        if (results.length > 0) {
+            const user = results[0];
+
+            const passwordMatch = await bcrypt.compare(password, user.user_pass);
+            if (passwordMatch) {
+                const token = jwt.sign(
+                    { userId: user.user_id, username: user.user_name },
+                    'secret', // Replace with a real secret in production
+                    { expiresIn: '1h' }
+                );
+
+                res.status(200).json({ message: "Login successful", token });
+            } else {
+                res.status(401).json({ message: "Invalid username or password" });
+            }
+        } else {
+            res.status(401).json({ message: "Invalid username or password" });
+        }
+    });
+});
+
+app.get('/protected', (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ message: 'Authentication failed' });
+    }
+
+    try {
+        const decodedToken = jwt.verify(token, 'secret'); // Replace with a real secret in production
+        req.userData = decodedToken;
+        res.status(200).json({ message: 'Access granted', userData: decodedToken });
+    } catch (err) {
+        res.status(401).json({ message: 'Authentication failed' });
+    }
+});
+
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+});
